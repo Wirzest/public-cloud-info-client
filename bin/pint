@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/home/vwirz/python3-virtualenv/bin/python3.11
 #
 # Copyright (c) 2020 SUSE Linux GmbH.  All rights reserved.
 #
@@ -24,6 +24,8 @@ usage: pint -h | --help
           [ --json | --xml ]
        pint image_states
           [ --json | --xml ]
+       pint ({PROVIDERS}) dataversions
+          [ --images | --servers ]
        pint ({PROVIDERS}) server_types 
           [ --json | --xml ]
        pint ({PROVIDERS}) regions
@@ -63,6 +65,10 @@ options:
        if omitted all regions are included
    --regionserver
        Provide only Region Server information
+   --images
+       Fetch data versions from images
+   --servers
+       Fetch data versions from servers
    --smt
        Provide only SMT Server information
    --xml
@@ -75,6 +81,7 @@ For Additional help run `man pint` to view the man page
 
 import json
 import sys
+from datetime import date, datetime
 
 from docopt import docopt
 
@@ -137,7 +144,7 @@ for item in server_types:
         server_type = item
         break
 
-output_format = 'plain'
+output_format = 'json'
 output_options = ('json', 'xml')
 for out in output_options:
     if command_args['--%s' % out]:
@@ -158,14 +165,28 @@ try:
             command_args['--filter'])
         if '<images/>' in data or '"images": []' in data:
             data = 'No information available. Please check your filter'
-        print(data)
+
+        if command_args["--deprecated"]:
+            # TODO: implement the xml equivalent
+            for img in json.loads(data)['images']:
+                print(json.dumps(img, indent=2))
+
+                now = date.today()
+                deprecatedon = datetime.strptime(img["deprecatedon"], "%Y%m%d").date()
+                if abs((now - deprecatedon).days) >= 6*30:
+                    print("WARNING: Deprecated for more than six months now.")
+                
+                print("\n")
+        else:
+            print(data)
+
     elif command_args['servers']:
         print(ifsrequest.get_server_data(
-            framework,
-            server_type,
-            output_format,
-            region,
-            command_args['--filter']))
+                                                framework,
+                                                server_type,
+                                                output_format,
+                                                region,
+                                                command_args['--filter']))
     elif command_args['providers']:
         print(ifsrequest.get_provider_data(
             framework,
@@ -180,6 +201,11 @@ try:
             output_format,
             region,
             command_args['--filter']))
+    elif command_args['dataversions']:
+        base_url = ifsrequest.__get_base_url()
+        category = "images" if command_args["--images"] else "servers"
+        response = ifsrequest.__get_data(f"{base_url}/v1/{framework}/dataversion?category={category}")
+        print(response)
     elif command_args['server_types']:
         print(ifsrequest.get_server_types_data(
             framework,
